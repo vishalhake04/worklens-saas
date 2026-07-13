@@ -1,0 +1,18 @@
+{
+  "name": "saas-food-delivery",
+  "version": "1.0.0",
+  "description": "Multi-Tenant B2B2C SaaS Hyper-Local Food Delivery Platform",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "seed": "node seed.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.2.0",
+    "sqlite3": "^5.1.7",
+    "ws": "^8.17.1"
+  },
+  "private": true
+}
