@@ -12,6 +12,12 @@ const PORT = 3000;
 
 const app = express();
 app.use(express.json());
+
+// Virtual Frontend Pages Routing
+app.get(['/platform-admin', '/tenant-admin', '/driver', '/storefront'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Ensure public/uploads directory exists

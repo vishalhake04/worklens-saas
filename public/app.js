@@ -77,26 +77,41 @@ function getSubdomain() {
 document.addEventListener('DOMContentLoaded', () => {
   initUIHandlers();
   
+  // Resolve role from URL pathname
+  const path = window.location.pathname;
+  if (path === '/platform-admin') {
+    state.activeRole = 'PLATFORM_ADMIN';
+  } else if (path === '/tenant-admin') {
+    state.activeRole = 'TENANT_ADMIN';
+  } else if (path === '/driver') {
+    state.activeRole = 'DRIVER';
+  } else if (path === '/storefront') {
+    state.activeRole = 'CONSUMER';
+  }
+
   const subdomain = getSubdomain();
   if (subdomain) {
     state.activeTenantId = subdomain;
-    state.activeRole = 'CONSUMER'; // Default role for storefront subdomains
+    // Storefront subdomains default to Consumer, unless specifically visiting a role path
+    if (path !== '/tenant-admin') {
+      state.activeRole = 'CONSUMER';
+    }
     
     // Hide Platform Admin role button
     const platformAdminBtn = document.querySelector('.role-btn[data-role="PLATFORM_ADMIN"]');
     if (platformAdminBtn) platformAdminBtn.style.display = 'none';
-
-    // Set consumer button active in switcher UI
-    document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
-    const consumerBtn = document.querySelector('.role-btn[data-role="CONSUMER"]');
-    if (consumerBtn) consumerBtn.classList.add('active');
 
     // Hide Tenant Switcher Select in Tenant Admin view
     const tenantSwitcher = document.querySelector('.tenant-switcher');
     if (tenantSwitcher) tenantSwitcher.style.display = 'none';
   }
 
-  // Auto login default user
+  // Set switcher active button
+  document.querySelectorAll('.role-btn').forEach(btn => btn.classList.remove('active'));
+  const activeBtn = document.querySelector(`.role-btn[data-role="${state.activeRole}"]`);
+  if (activeBtn) activeBtn.classList.add('active');
+
+  // Auto login default user matching URL-determined role
   loginAndSwitchRole(state.activeRole);
 });
 
@@ -107,6 +122,16 @@ function initUIHandlers() {
       const targetRole = e.target.getAttribute('data-role');
       document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
       e.target.classList.add('active');
+      
+      // Update URL Path matching target role
+      let newPath = '/';
+      if (targetRole === 'PLATFORM_ADMIN') newPath = '/platform-admin';
+      else if (targetRole === 'TENANT_ADMIN') newPath = '/tenant-admin';
+      else if (targetRole === 'DRIVER') newPath = '/driver';
+      else if (targetRole === 'CONSUMER') newPath = '/storefront';
+      
+      history.pushState(null, '', newPath);
+      
       loginAndSwitchRole(targetRole);
     });
   });
