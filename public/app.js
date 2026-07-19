@@ -74,11 +74,24 @@ let mapCtx = null;
 
 // Resolve Subdomain from Window Location
 function getSubdomain() {
-  const host = window.location.hostname; // e.g. "tenant_1.localhost" or "localhost"
+  const host = window.location.hostname.toLowerCase(); // e.g. "tenant_1.localhost" or "localhost"
   const parts = host.split('.');
-  if (parts.length > 1 && parts[parts.length - 1] === 'localhost' && parts[0] !== 'www') {
-    return parts[0]; // e.g. "tenant_1"
+  
+  // 1. Localhost subdomains (e.g. tenant_1.localhost)
+  if (parts.length === 2 && parts[1] === 'localhost' && parts[0] !== 'www') {
+    return parts[0];
   }
+  
+  // 2. Wildcard nip.io subdomains (e.g. tenant_1.16.170.251.215.nip.io)
+  if (host.endsWith('.nip.io') && parts.length === 7 && parts[0] !== 'www') {
+    return parts[0];
+  }
+  
+  // 3. Custom domain subdomains (e.g. tenant_1.yourdomain.com)
+  if (parts.length === 3 && parts[1] !== 'nip' && parts[0] !== 'www') {
+    return parts[0];
+  }
+  
   return null;
 }
 

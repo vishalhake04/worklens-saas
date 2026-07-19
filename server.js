@@ -80,11 +80,19 @@ async function resolveTenantContext(req, res, next) {
   // 1. Try resolving tenant from Host header subdomain (e.g. tenant_1.localhost:3000 -> tenant_1)
   const hostHeader = req.headers.host;
   if (hostHeader) {
-    const hostname = hostHeader.split(':')[0]; // Remove port
+    const hostname = hostHeader.split(':')[0].toLowerCase(); // Remove port and make lowercase
     const parts = hostname.split('.');
     
-    // Subdomain exists if parts has at least two elements and final is localhost, excluding www
-    if (parts.length > 1 && parts[parts.length - 1] === 'localhost' && parts[0] !== 'www') {
+    // 1. Localhost subdomains (e.g. tenant_1.localhost)
+    if (parts.length === 2 && parts[1] === 'localhost' && parts[0] !== 'www') {
+      requestedTenantId = parts[0];
+    }
+    // 2. Wildcard nip.io subdomains (e.g. tenant_1.16.170.251.215.nip.io)
+    else if (hostname.endsWith('.nip.io') && parts.length === 7 && parts[0] !== 'www') {
+      requestedTenantId = parts[0];
+    }
+    // 3. Custom domain subdomains (e.g. tenant_1.yourdomain.com)
+    else if (parts.length === 3 && parts[1] !== 'nip' && parts[0] !== 'www') {
       requestedTenantId = parts[0];
     }
   }
