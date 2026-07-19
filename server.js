@@ -1305,6 +1305,14 @@ wss.on('connection', (ws) => {
   });
 });
 
+// SPA Wildcard fallback routing for all virtual page reloads
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/')) {
+    return res.status(404).json({ error: 'API route not found' });
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // Run server initialization
 dbManager.initPlatformDb().then(() => {
   server.listen(PORT, () => {
