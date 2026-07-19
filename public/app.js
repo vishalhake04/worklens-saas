@@ -2455,6 +2455,9 @@ window.openTenantEditModal = function(tenantId) {
   document.getElementById('editTenantDomain').value = tenant.domain;
   document.getElementById('editTenantEmail').value = tenant.email || '';
   document.getElementById('editTenantPhone').value = tenant.phone || '';
+  document.getElementById('editTenantAddress').value = tenant.address || '';
+  document.getElementById('editTenantLat').value = tenant.latitude !== null ? tenant.latitude : '';
+  document.getElementById('editTenantLng').value = tenant.longitude !== null ? tenant.longitude : '';
   document.getElementById('editTenantTier').value = tenant.subscription_tier;
   document.getElementById('editTenantStatus').value = tenant.status;
   document.getElementById('tenantEditStatusMessage').innerText = '';
@@ -2468,11 +2471,14 @@ async function handleTenantEditFormSubmit() {
   const domain = document.getElementById('editTenantDomain').value.trim();
   const email = document.getElementById('editTenantEmail').value.trim();
   const phone = document.getElementById('editTenantPhone').value.trim();
+  const address = document.getElementById('editTenantAddress').value.trim();
+  const latitude = parseFloat(document.getElementById('editTenantLat').value);
+  const longitude = parseFloat(document.getElementById('editTenantLng').value);
   const subscriptionTier = document.getElementById('editTenantTier').value;
   const status = document.getElementById('editTenantStatus').value;
   const statusDiv = document.getElementById('tenantEditStatusMessage');
 
-  if (!businessName || !domain || !subscriptionTier || !status || !email || !phone) {
+  if (!businessName || !domain || !subscriptionTier || !status || !email || !phone || !address || isNaN(latitude) || isNaN(longitude)) {
     statusDiv.style.color = 'var(--accent-red)';
     statusDiv.innerText = 'All fields are required.';
     return;
@@ -2481,7 +2487,7 @@ async function handleTenantEditFormSubmit() {
   statusDiv.style.color = 'var(--text-secondary)';
   statusDiv.innerText = 'Saving...';
 
-  const payload = { businessName, domain, subscriptionTier, status, email, phone };
+  const payload = { businessName, domain, subscriptionTier, status, email, phone, address, latitude, longitude };
 
   try {
     const response = await fetch(`/api/admin/tenants/${id}`, {

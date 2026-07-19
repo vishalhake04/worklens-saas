@@ -850,6 +850,20 @@
             <input type="text" id="editTenantPhone" placeholder="e.g. 9876543210" required>
           </div>
           <div class="form-group">
+            <label for="editTenantAddress">Storefront Physical Address</label>
+            <input type="text" id="editTenantAddress" placeholder="e.g. 120 Broadway, New York, NY 10271" required>
+          </div>
+          <div style="display: flex; gap: 12px; margin-bottom: 15px;">
+            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+              <label for="editTenantLat">Latitude Coordinate</label>
+              <input type="number" id="editTenantLat" step="any" placeholder="e.g. 40.7128" required>
+            </div>
+            <div class="form-group" style="flex: 1; margin-bottom: 0;">
+              <label for="editTenantLng">Longitude Coordinate</label>
+              <input type="number" id="editTenantLng" step="any" placeholder="e.g. -74.0060" required>
+            </div>
+          </div>
+          <div class="form-group">
             <label for="editTenantTier">Subscription Tier</label>
             <select id="editTenantTier">
               <option value="BASIC">Basic (Monthly flat-fee)</option>

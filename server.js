@@ -326,14 +326,17 @@ app.get('/api/admin/tenants', authenticateToken, async (req, res) => {
       try {
         const tenantDb = await dbManager.getTenantDb(tenant.id);
         const orderCount = await dbManager.dbGet(tenantDb, 'SELECT COUNT(*) as count FROM orders');
-        const restaurant = await dbManager.dbGet(tenantDb, 'SELECT name FROM restaurants LIMIT 1');
+        const restaurant = await dbManager.dbGet(tenantDb, 'SELECT name, address, latitude, longitude FROM restaurants LIMIT 1');
         results.push({
           ...tenant,
           ordersCount: orderCount.count,
-          restaurantName: restaurant ? restaurant.name : 'No Branch Setup'
+          restaurantName: restaurant ? restaurant.name : 'No Branch Setup',
+          address: restaurant ? restaurant.address : '',
+          latitude: restaurant ? restaurant.latitude : null,
+          longitude: restaurant ? restaurant.longitude : null
         });
       } catch (err) {
-        results.push({ ...tenant, ordersCount: 0, restaurantName: 'Error loading' });
+        results.push({ ...tenant, ordersCount: 0, restaurantName: 'Error loading', address: '', latitude: null, longitude: null });
       }
     }
 
@@ -400,9 +403,9 @@ app.put('/api/admin/tenants/:id', authenticateToken, async (req, res) => {
   }
 
   const { id } = req.params;
-  const { businessName, domain, subscriptionTier, status, email, phone } = req.body;
-  if (!businessName || !domain || !subscriptionTier || !status || !email || !phone) {
-    return res.status(400).json({ error: 'All fields (businessName, domain, subscriptionTier, status, email, phone) are required' });
+  const { businessName, domain, subscriptionTier, status, email, phone, address, latitude, longitude } = req.body;
+  if (!businessName || !domain || !subscriptionTier || !status || !email || !phone || !address || latitude === undefined || longitude === undefined) {
+    return res.status(400).json({ error: 'All fields (businessName, domain, subscriptionTier, status, email, phone, address, latitude, longitude) are required' });
   }
 
   try {
@@ -426,6 +429,14 @@ app.put('/api/admin/tenants/:id', authenticateToken, async (req, res) => {
       platformDb,
       `UPDATE users SET email = ?, phone = ? WHERE tenant_id = ? AND role = 'TENANT_ADMIN'`,
       [email, phone, id]
+    );
+
+    // Update Tenant restaurant location details in tenant DB
+    const tenantDb = await dbManager.getTenantDb(id);
+    await dbManager.dbRun(
+      tenantDb,
+      `UPDATE restaurants SET address = ?, latitude = ?, longitude = ?`,
+      [address, parseFloat(latitude), parseFloat(longitude)]
     );
 
     res.json({ message: `Tenant details for '${id}' updated successfully.` });
