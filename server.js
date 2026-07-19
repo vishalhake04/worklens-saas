@@ -349,9 +349,9 @@ app.post('/api/admin/tenants', authenticateToken, async (req, res) => {
     return res.status(403).json({ error: 'Require Platform Admin role' });
   }
 
-  const { id, businessName, domain, subscriptionTier, email, phone } = req.body;
-  if (!id || !businessName || !domain || !subscriptionTier || !email || !phone) {
-    return res.status(400).json({ error: 'All fields (id, businessName, domain, subscriptionTier, email, phone) are required' });
+  const { id, businessName, domain, subscriptionTier, email, phone, address, latitude, longitude } = req.body;
+  if (!id || !businessName || !domain || !subscriptionTier || !email || !phone || !address || latitude === undefined || longitude === undefined) {
+    return res.status(400).json({ error: 'All fields (id, businessName, domain, subscriptionTier, email, phone, address, latitude, longitude) are required' });
   }
 
   try {
@@ -375,11 +375,11 @@ app.post('/api/admin/tenants', authenticateToken, async (req, res) => {
     // Call dynamic database loader which initiates the database file and executes tenant schema tables automatically
     const tenantDb = await dbManager.getTenantDb(id);
 
-    // Seed dummy restaurant branch details for the tenant database
+    // Seed restaurant branch details for the tenant database using provided location parameters
     await dbManager.dbRun(
       tenantDb,
       `INSERT INTO restaurants (id, name, latitude, longitude, address, status) VALUES (?, ?, ?, ?, ?, ?)`,
-      [`rest_${id}`, `${businessName} Express`, 40.7128 + (Math.random() - 0.5) * 0.05, -74.0060 + (Math.random() - 0.5) * 0.05, `100 Main St, ${businessName} District`, 'OPEN']
+      [`rest_${id}`, `${businessName} Express`, parseFloat(latitude), parseFloat(longitude), address, 'OPEN']
     );
 
     res.status(201).json({

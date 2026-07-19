@@ -773,6 +773,9 @@ async function handleOnboardTenantSubmit(e) {
   const domain = document.getElementById('newTenantDomain').value.trim();
   const email = document.getElementById('newTenantEmail').value.trim();
   const phone = document.getElementById('newTenantPhone').value.trim();
+  const address = document.getElementById('newTenantAddress').value.trim();
+  const latitude = parseFloat(document.getElementById('newTenantLat').value);
+  const longitude = parseFloat(document.getElementById('newTenantLng').value);
   const subscriptionTier = document.getElementById('newTenantTier').value;
 
   const msgDiv = document.getElementById('onboardStatusMessage');
@@ -786,7 +789,7 @@ async function handleOnboardTenantSubmit(e) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${state.token}`
       },
-      body: JSON.stringify({ id, businessName, domain, subscriptionTier, email, phone })
+      body: JSON.stringify({ id, businessName, domain, subscriptionTier, email, phone, address, latitude, longitude })
     });
     const data = await response.json();
 
