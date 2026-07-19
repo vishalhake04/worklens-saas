@@ -642,6 +642,33 @@ async function loginAndSwitchRole(role) {
   }
 }
 
+function handleInvalidToken(role) {
+  if (role === 'PLATFORM_ADMIN') {
+    state.platformAdminToken = null;
+    state.platformAdminUser = null;
+    localStorage.removeItem('platformAdminToken');
+    localStorage.removeItem('platformAdminUser');
+  } else if (role === 'TENANT_ADMIN') {
+    state.tenantToken = null;
+    state.tenantUser = null;
+    localStorage.removeItem('tenantToken');
+    localStorage.removeItem('tenantUser');
+  } else if (role === 'CONSUMER') {
+    state.consumerToken = null;
+    state.consumerUser = null;
+    localStorage.removeItem('consumerToken');
+    localStorage.removeItem('consumerUser');
+  } else if (role === 'DRIVER') {
+    state.driverToken = null;
+    state.driverUser = null;
+    localStorage.removeItem('driverToken');
+    localStorage.removeItem('driverUser');
+  }
+  state.token = null;
+  state.user = null;
+  loginAndSwitchRole(role);
+}
+
 function connectWebSocket() {
   if (state.socket) {
     state.socket.close();
@@ -735,6 +762,10 @@ async function refreshPlatformAdminDashboard() {
       headers: { 'Authorization': `Bearer ${state.token}` }
     });
     const tenants = await response.json();
+    if (response.status === 401 || response.status === 403) {
+      handleInvalidToken('PLATFORM_ADMIN');
+      return;
+    }
     state.tenants = tenants;
 
     const tbody = document.querySelector('#tenantsTable tbody');
@@ -837,7 +868,12 @@ async function refreshTenantDashboard() {
 
     // 1. Fetch Orders
     const ordersRes = await fetch('/api/tenant/orders', { headers });
-    state.tenantOrders = await ordersRes.json();
+    const ordersData = await ordersRes.json();
+    if (ordersRes.status === 401 || ordersRes.status === 403) {
+      handleInvalidToken('TENANT_ADMIN');
+      return;
+    }
+    state.tenantOrders = ordersData;
     renderTenantOrders();
 
     // 2. Fetch Menu
