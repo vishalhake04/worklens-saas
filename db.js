@@ -86,11 +86,30 @@ function getTenantDb(tenantId) {
       if (!dbExists) {
         console.log(`Initializing new database schema for tenant: ${tenantId}`);
         initializeTenantSchema(db)
+          .then(() => runMigrations(db))
           .then(() => resolve(db))
           .catch(reject);
       } else {
-        resolve(db);
+        runMigrations(db)
+          .then(() => resolve(db))
+          .catch((err) => {
+            console.error('Migration failed, continuing anyway:', err);
+            resolve(db);
+          });
       }
+    });
+  });
+}
+
+function runMigrations(db) {
+  return new Promise((resolve) => {
+    db.serialize(() => {
+      db.run("ALTER TABLE restaurants ADD COLUMN delivery_enabled INTEGER DEFAULT 1", () => {});
+      db.run("ALTER TABLE restaurants ADD COLUMN pickup_enabled INTEGER DEFAULT 1", () => {});
+      db.run("ALTER TABLE orders ADD COLUMN fulfillment_type TEXT DEFAULT 'DELIVERY'", () => {});
+      db.run("ALTER TABLE orders ADD COLUMN pickup_code TEXT", () => {
+        resolve();
+      });
     });
   });
 }
@@ -108,6 +127,8 @@ function initializeTenantSchema(db) {
           address TEXT NOT NULL,
           contact_phone TEXT,
           status TEXT CHECK(status IN ('OPEN', 'CLOSED', 'PAUSED')) DEFAULT 'OPEN',
+          delivery_enabled INTEGER DEFAULT 1,
+          pickup_enabled INTEGER DEFAULT 1,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
@@ -182,6 +203,8 @@ function initializeTenantSchema(db) {
           delivery_address TEXT NOT NULL,
           delivery_lat REAL NOT NULL,
           delivery_lng REAL NOT NULL,
+          fulfillment_type TEXT CHECK(fulfillment_type IN ('DELIVERY', 'PICKUP')) DEFAULT 'DELIVERY',
+          pickup_code TEXT DEFAULT NULL,
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);

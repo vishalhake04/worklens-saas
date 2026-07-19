@@ -45,8 +45,8 @@ async function seed() {
     await dbManager.dbRun(platformDb, insertUser, ['usr_consumer_2', 'tenant_2', 'diner2@foodie.com', 'password123', 'CONSUMER', 'Alice', 'Smith', '333-444-5555', '250 Main St, New York, NY', 'ACTIVE']);
     
     // Drivers
-    await dbManager.dbRun(platformDb, insertUser, ['usr_driver_1', null, 'driver1@delivery.com', 'password123', 'DRIVER', 'Dave', 'Fast', '444-555-6666', null, 'ACTIVE']);
-    await dbManager.dbRun(platformDb, insertUser, ['usr_driver_2', null, 'driver2@delivery.com', 'password123', 'DRIVER', 'Dan', 'Quick', '777-888-9999', null, 'ACTIVE']);
+    await dbManager.dbRun(platformDb, insertUser, ['usr_driver_1', 'tenant_1', 'driver1@delivery.com', 'password123', 'DRIVER', 'Dave', 'Fast', '444-555-6666', null, 'ACTIVE']);
+    await dbManager.dbRun(platformDb, insertUser, ['usr_driver_2', 'tenant_2', 'driver2@delivery.com', 'password123', 'DRIVER', 'Dan', 'Quick', '777-888-9999', null, 'ACTIVE']);
 
     console.log('Seeded users.');
 

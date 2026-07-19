@@ -23,8 +23,8 @@
       </div>
     </div>
     
-    <!-- Role Switcher Panel (Hidden) -->
-    <div class="role-selector" style="display: none;">
+    <!-- Role Switcher Panel -->
+    <div class="role-selector">
       <span class="selector-label">View System as:</span>
       <div class="role-buttons">
         <button class="role-btn active" data-role="PLATFORM_ADMIN">Platform Admin</button>
@@ -35,84 +35,142 @@
     </div>
 
     <div class="auth-status" id="authStatus">
-      <span class="status-dot green"></span>
+      <span class="status-dot green" id="authStatusDot"></span>
       <span id="currentUserLabel">Platform Admin</span>
+      <button id="consumerHeaderLoginBtn" class="primary-btn" style="margin-left: 12px; font-size: 11px; padding: 4px 10px; display: none; border-radius: var(--radius-sm); cursor: pointer;">Sign In</button>
+      <button id="consumerHeaderLogoutBtn" class="secondary-btn red-btn" style="margin-left: 12px; font-size: 11px; padding: 4px 10px; display: none; border-radius: var(--radius-sm); cursor: pointer;">Logout</button>
+      <button id="platformLogoutBtn" class="secondary-btn red-btn" style="margin-left: 12px; font-size: 11px; padding: 4px 10px; display: none; border-radius: var(--radius-sm); cursor: pointer;">Logout</button>
+      <button id="driverLogoutBtn" class="secondary-btn red-btn" style="margin-left: 12px; font-size: 11px; padding: 4px 10px; display: none; border-radius: var(--radius-sm); cursor: pointer;">Logout</button>
     </div>
   </header>
+
+  <!-- Domain Context Mismatch Blocked View -->
+  <div id="domainBlockedOverlay" style="display: none; height: 80vh; align-items: center; justify-content: center; padding: 20px;">
+    <div class="consumer-card" style="max-width: 500px; text-align: center; margin: 0 auto; box-shadow: var(--shadow-lg);">
+      <span style="font-size: 48px;">⚠️</span>
+      <h3 style="margin-top: 15px; color: var(--accent-red);" id="domainBlockedTitle">Access Denied</h3>
+      <p style="margin-top: 15px; font-size: 14px; line-height: 1.6; color: var(--text-secondary);" id="domainBlockedText">
+        Mismatched domain context mapping.
+      </p>
+      <div style="margin-top: 20px; border-top: 1px solid var(--border-color); padding-top: 15px; font-size: 12px; color: var(--text-muted);">
+        Work Lens - Multi-Tenant Domain Boundary Enforcement
+      </div>
+    </div>
+  </div>
 
   <!-- MAIN SIMULATION WRAPPER -->
   <main class="app-container">
 
     <!-- 1. PLATFORM ADMIN VIEW -->
     <section class="view-panel active" id="panel-PLATFORM_ADMIN">
-      <div class="panel-header">
-        <h2>Global Platform Administration</h2>
-        <p>Manage multiple independent restaurant tenants, track transaction metrics, and dynamically spin up new databases.</p>
-      </div>
       
-      <div class="admin-grid">
-        <!-- Onboard Tenant Card -->
+      <!-- Platform Admin Login Gate -->
+      <div id="platformAuthGate" style="display: none; max-width: 450px; margin: 40px auto;">
         <div class="admin-card">
-          <h3>Onboard New Tenant</h3>
-          <p class="card-subtitle">Dynamically provisions a new physical SQLite database and initializes schema.</p>
-          <form id="onboardTenantForm" class="styled-form">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h3>Platform Admin Login</h3>
+          </div>
+          <p class="card-subtitle" style="margin-bottom: 20px;">Sign in to access global system configuration and tenant provisions.</p>
+          <form id="platformLoginForm" class="styled-form">
             <div class="form-group">
-              <label for="newTenantId">Tenant Unique ID</label>
-              <input type="text" id="newTenantId" placeholder="e.g., tacobell" required>
+              <label for="platformLoginEmail">Email Address</label>
+              <input type="email" id="platformLoginEmail" placeholder="e.g. admin@saas.com" required>
             </div>
             <div class="form-group">
-              <label for="newTenantName">Business Name</label>
-              <input type="text" id="newTenantName" placeholder="e.g., Taco Bell LLC" required>
+              <label for="platformLoginPassword">Password</label>
+              <input type="password" id="platformLoginPassword" placeholder="••••••••" required>
             </div>
-            <div class="form-group">
-              <label for="newTenantDomain">Custom Domain</label>
-              <input type="text" id="newTenantDomain" placeholder="e.g., tacobell.com" required>
-            </div>
-            <div class="form-group">
-              <label for="newTenantEmail">Email ID</label>
-              <input type="email" id="newTenantEmail" placeholder="e.g., admin@tacobell.com" required>
-            </div>
-            <div class="form-group">
-              <label for="newTenantPhone">Mobile Number (used for login)</label>
-              <input type="text" id="newTenantPhone" placeholder="e.g., 9876543210" required>
-            </div>
-            <div class="form-group">
-              <label for="newTenantTier">Subscription Tier</label>
-              <select id="newTenantTier">
-                <option value="BASIC">Basic (Monthly flat-fee)</option>
-                <option value="PREMIUM" selected>Premium (12% Commission Split)</option>
-                <option value="ENTERPRISE">Enterprise (Dedicated instance)</option>
-              </select>
-            </div>
-            <button type="submit" class="primary-btn">Provision Tenant & DB</button>
+            <button type="submit" class="primary-btn">Sign In</button>
           </form>
-          <div id="onboardStatusMessage" class="status-message"></div>
+          <div id="platformAuthStatusMessage" class="status-message" style="margin-top: 15px;"></div>
         </div>
+      </div>
 
-        <!-- Tenant List Card -->
-        <div class="admin-card wide-card">
-          <h3>Active Tenants Partition Registry</h3>
-          <p class="card-subtitle">Showing logical routing domains and database statistics.</p>
-          <div class="table-container">
-            <table class="data-table" id="tenantsTable">
-              <thead>
-                <tr>
-                  <th>Tenant ID</th>
-                  <th>Business Name</th>
-                  <th>Domain Mapping</th>
-                  <th>Email</th>
-                  <th>Mobile No</th>
-                  <th>Database Storage File</th>
-                  <th>SaaS Tier</th>
-                  <th>Orders Processed</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <!-- Populated dynamically -->
-              </tbody>
-            </table>
+      <!-- Platform Admin Main Dashboard -->
+      <div id="platformMainDashboard" style="display: block;">
+        <div class="panel-header">
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px;">
+            <div>
+              <h2>Global Platform Administration</h2>
+              <p>Manage multiple independent restaurant tenants, track transaction metrics, and dynamically spin up new databases.</p>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Platform Admin Menu Tabs -->
+        <div class="tab-container" id="platformTabsGroup" style="margin-bottom: 24px; display: flex; gap: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+          <button class="tab-btn active" id="platformTenantListTabBtn" style="background: none; border: none; color: var(--text-secondary); font-size: 14px; font-weight: 600; padding: 8px 16px; cursor: pointer; border-radius: 4px;">Tenant List</button>
+          <button class="tab-btn" id="platformAddTenantTabBtn" style="background: none; border: none; color: var(--text-secondary); font-size: 14px; font-weight: 600; padding: 8px 16px; cursor: pointer; border-radius: 4px;">Add New Tenant</button>
+        </div>
+        
+        <div class="admin-grid" style="grid-template-columns: 1fr; gap: 0;">
+          <!-- Tenant List Card Panel -->
+          <div id="platformTenantListTab" style="display: block; width: 100%;">
+            <div class="admin-card wide-card" style="margin-top: 0;">
+              <h3>Active Tenants Partition Registry</h3>
+              <p class="card-subtitle">Showing logical routing domains and database statistics.</p>
+              <div class="table-container">
+                <table class="data-table" id="tenantsTable">
+                  <thead>
+                    <tr>
+                      <th>Tenant ID</th>
+                      <th>Business Name</th>
+                      <th>Domain Mapping</th>
+                      <th>Email</th>
+                      <th>Mobile No</th>
+                      <th>Database Storage File</th>
+                      <th>SaaS Tier</th>
+                      <th>Orders Processed</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- Populated dynamically -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Onboard Tenant Card Panel (hidden by default) -->
+          <div id="platformAddTenantTab" style="display: none; max-width: 600px; margin: 0 auto; width: 100%;">
+            <div class="admin-card" style="margin-top: 0;">
+              <h3>Onboard New Tenant</h3>
+              <p class="card-subtitle">Dynamically provisions a new physical SQLite database and initializes schema.</p>
+              <form id="onboardTenantForm" class="styled-form">
+                <div class="form-group">
+                  <label for="newTenantId">Tenant Unique ID</label>
+                  <input type="text" id="newTenantId" placeholder="e.g., tacobell" required>
+                </div>
+                <div class="form-group">
+                  <label for="newTenantName">Business Name</label>
+                  <input type="text" id="newTenantName" placeholder="e.g., Taco Bell LLC" required>
+                </div>
+                <div class="form-group">
+                  <label for="newTenantDomain">Custom Domain</label>
+                  <input type="text" id="newTenantDomain" placeholder="e.g., tacobell.com" required>
+                </div>
+                <div class="form-group">
+                  <label for="newTenantEmail">Email ID</label>
+                  <input type="email" id="newTenantEmail" placeholder="e.g., admin@tacobell.com" required>
+                </div>
+                <div class="form-group">
+                  <label for="newTenantPhone">Mobile Number (used for login)</label>
+                  <input type="text" id="newTenantPhone" placeholder="e.g., 9876543210" required>
+                </div>
+                <div class="form-group">
+                  <label for="newTenantTier">Subscription Tier</label>
+                  <select id="newTenantTier">
+                    <option value="BASIC">Basic (Monthly flat-fee)</option>
+                    <option value="PREMIUM" selected>Premium (12% Commission Split)</option>
+                    <option value="ENTERPRISE">Enterprise (Dedicated instance)</option>
+                  </select>
+                </div>
+                <button type="submit" class="primary-btn">Provision Tenant & DB</button>
+              </form>
+              <div id="onboardStatusMessage" class="status-message"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -163,6 +221,7 @@
         <button id="tenantOrdersTabBtn" class="primary-btn" style="padding: 6px 12px; font-size: 11px; margin-top: 0;">Fulfillment & Order Queue</button>
         <button id="tenantMenuTabBtn" class="secondary-btn" style="padding: 6px 12px; font-size: 11px; margin-top: 0;">Dynamic Storefront Menu</button>
         <button id="tenantConsumersTabBtn" class="secondary-btn" style="padding: 6px 12px; font-size: 11px; margin-top: 0;">Registered Consumers</button>
+        <button id="tenantSettingsTabBtn" class="secondary-btn" style="padding: 6px 12px; font-size: 11px; margin-top: 0;">Storefront Settings</button>
       </div>
 
       <div class="tenant-grid" id="tenantMainDashboard">
@@ -231,6 +290,32 @@
             </table>
           </div>
         </div>
+
+        <!-- Storefront Settings Card -->
+        <div class="tenant-card wide-card" id="tenantSettingsCard" style="display: none; max-width: 600px; margin: 0 auto; width: 100%;">
+          <h3>Storefront Settings Configuration</h3>
+          <p class="card-subtitle">Select enabled delivery options and customize fulfillment parameters.</p>
+          <form id="tenantSettingsForm" class="styled-form" style="margin-top: 15px;">
+            <div class="form-group">
+              <label style="display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; color: var(--text-main);">
+                <input type="checkbox" id="settingAllowDelivery" checked style="width: 18px; height: 18px;">
+                Enable Proximity Driver Delivery (Logistics Fleet Dispatch)
+              </label>
+              <p style="font-size: 12px; color: var(--text-secondary); margin-left: 28px; margin-top: 4px;">Orders will automatically dispatch to nearby online delivery drivers.</p>
+            </div>
+            
+            <div class="form-group" style="margin-top: 20px;">
+              <label style="display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; color: var(--text-main);">
+                <input type="checkbox" id="settingAllowPickup" checked style="width: 18px; height: 18px;">
+                Enable Self-Pickup Fulfillment (Consumer Pickup)
+              </label>
+              <p style="font-size: 12px; color: var(--text-secondary); margin-left: 28px; margin-top: 4px;">Consumers pick up order themselves using a secure validation pass code generated on order confirmation.</p>
+            </div>
+            
+            <button type="submit" class="primary-btn" style="margin-top: 20px;">Save Settings Configuration</button>
+          </form>
+          <div id="tenantSettingsStatusMessage" class="status-message" style="margin-top: 15px;"></div>
+        </div>
       </div>
     </section>
 
@@ -247,62 +332,67 @@
         </div>
       </div>
 
-      <!-- CONSUMER AUTHENTICATION GATE -->
-      <div class="auth-gate-container" id="consumerAuthGate" style="display: none; padding: 20px 0;">
-        <div class="admin-card" style="max-width: 400px; margin: 0 auto; box-shadow: var(--shadow-lg);">
-          <h3 id="consumerAuthTitle">Diner Login</h3>
-          <p class="card-subtitle" id="consumerAuthSubtitle">Sign in to place orders and track deliveries.</p>
-          
-          <!-- Login Form -->
-          <form id="consumerLoginForm" class="styled-form">
-            <div class="form-group">
-              <label for="consumerLoginEmail">Email or Mobile Number</label>
-              <input type="text" id="consumerLoginEmail" placeholder="e.g. 222-333-4444 or diner@foodie.com" required>
-            </div>
-            <div class="form-group">
-              <label for="consumerLoginPassword">Password</label>
-              <input type="password" id="consumerLoginPassword" placeholder="••••••••" required>
-            </div>
-            <button type="submit" class="primary-btn">Sign In</button>
-            <p style="font-size: 12px; text-align: center; margin-top: 10px; color: var(--text-secondary);">
-              New to Work Lens? <a href="#" id="showRegisterBtn" class="text-btn">Create an account</a>
-            </p>
-          </form>
+      <!-- CONSUMER AUTHENTICATION MODAL -->
+      <div class="modal" id="consumerAuthModal" style="display: none;">
+        <div class="modal-content" style="max-width: 450px;">
+          <div class="modal-header">
+            <h3 id="consumerAuthTitle">Diner Login</h3>
+            <button class="close-btn" id="closeConsumerAuthModalBtn">&times;</button>
+          </div>
+          <div class="modal-body" style="padding: 20px;">
+            <p class="card-subtitle" id="consumerAuthSubtitle" style="margin-bottom: 20px;">Sign in to place orders and track deliveries.</p>
+            
+            <!-- Login Form -->
+            <form id="consumerLoginForm" class="styled-form">
+              <div class="form-group">
+                <label for="consumerLoginEmail">Email or Mobile Number</label>
+                <input type="text" id="consumerLoginEmail" placeholder="e.g. 222-333-4444 or diner@foodie.com" required>
+              </div>
+              <div class="form-group">
+                <label for="consumerLoginPassword">Password</label>
+                <input type="password" id="consumerLoginPassword" placeholder="••••••••" required>
+              </div>
+              <button type="submit" class="primary-btn">Sign In</button>
+              <p style="font-size: 12px; text-align: center; margin-top: 10px; color: var(--text-secondary);">
+                New to Work Lens? <a href="#" id="showRegisterBtn" class="text-btn">Create an account</a>
+              </p>
+            </form>
 
-          <!-- Register Form (hidden initially) -->
-          <form id="consumerRegisterForm" class="styled-form" style="display: none;">
-            <div class="form-group">
-              <label for="consumerRegEmail">Email Address</label>
-              <input type="email" id="consumerRegEmail" placeholder="yourname@gmail.com" required>
-            </div>
-            <div class="form-group">
-              <label for="consumerRegPassword">Password</label>
-              <input type="password" id="consumerRegPassword" placeholder="••••••••" required>
-            </div>
-            <div style="display: flex; gap: 12px;">
-              <div class="form-group" style="flex: 1;">
-                <label for="consumerRegFirstName">First Name</label>
-                <input type="text" id="consumerRegFirstName" placeholder="John" required>
+            <!-- Register Form (hidden initially) -->
+            <form id="consumerRegisterForm" class="styled-form" style="display: none;">
+              <div class="form-group">
+                <label for="consumerRegEmail">Email Address</label>
+                <input type="email" id="consumerRegEmail" placeholder="yourname@gmail.com" required>
               </div>
-              <div class="form-group" style="flex: 1;">
-                <label for="consumerRegLastName">Last Name</label>
-                <input type="text" id="consumerRegLastName" placeholder="Doe" required>
+              <div class="form-group">
+                <label for="consumerRegPassword">Password</label>
+                <input type="password" id="consumerRegPassword" placeholder="••••••••" required>
               </div>
-            </div>
-            <div class="form-group">
-              <label for="consumerRegPhone">Mobile Number (used for login)</label>
-              <input type="text" id="consumerRegPhone" placeholder="e.g. 222-333-4444" required>
-            </div>
-            <div class="form-group">
-              <label for="consumerRegAddress">Delivery Address</label>
-              <input type="text" id="consumerRegAddress" placeholder="e.g. 120 Broadway, New York, NY" required>
-            </div>
-            <button type="submit" class="primary-btn green-btn">Sign Up & Register</button>
-            <p style="font-size: 12px; text-align: center; margin-top: 10px; color: var(--text-secondary);">
-              Already have an account? <a href="#" id="showLoginBtn" class="text-btn">Sign in instead</a>
-            </p>
-          </form>
-          <div id="consumerAuthStatusMessage" class="status-message" style="margin-top: 15px;"></div>
+              <div style="display: flex; gap: 12px;">
+                <div class="form-group" style="flex: 1;">
+                  <label for="consumerRegFirstName">First Name</label>
+                  <input type="text" id="consumerRegFirstName" placeholder="John" required>
+                </div>
+                <div class="form-group" style="flex: 1;">
+                  <label for="consumerRegLastName">Last Name</label>
+                  <input type="text" id="consumerRegLastName" placeholder="Doe" required>
+                </div>
+              </div>
+              <div class="form-group">
+                <label for="consumerRegPhone">Mobile Number (used for login)</label>
+                <input type="text" id="consumerRegPhone" placeholder="e.g. 222-333-4444" required>
+              </div>
+              <div class="form-group">
+                <label for="consumerRegAddress">Delivery Address</label>
+                <input type="text" id="consumerRegAddress" placeholder="e.g. 120 Broadway, New York, NY" required>
+              </div>
+              <button type="submit" class="primary-btn green-btn">Sign Up & Register</button>
+              <p style="font-size: 12px; text-align: center; margin-top: 10px; color: var(--text-secondary);">
+                Already have an account? <a href="#" id="showLoginBtn" class="text-btn">Sign in instead</a>
+              </p>
+            </form>
+            <div id="consumerAuthStatusMessage" class="status-message" style="margin-top: 15px;"></div>
+          </div>
         </div>
       </div>
 
@@ -314,7 +404,6 @@
           <div class="consumer-card" id="storefrontDiscoverPanel">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
               <h3>Browse Local Brands</h3>
-              <button id="consumerLogoutBtn" class="secondary-btn" style="padding: 4px 10px; font-size: 11px;">Logout</button>
             </div>
             <p class="card-subtitle">Discovered stores across the platform:</p>
             <div class="restaurant-list" id="consumerRestaurantList">
@@ -328,7 +417,6 @@
               <div class="store-back-nav" style="margin-bottom: 0;">
                 <button id="backToStoresBtn" class="text-btn">&larr; Back to Restaurant List</button>
               </div>
-              <button id="consumerLogoutBtnSub" class="secondary-btn" style="padding: 4px 10px; font-size: 11px;">Logout</button>
             </div>
             <h3 id="currentStoreName">Pizza Hub</h3>
             <p class="card-subtitle" id="currentStoreAddress">120 Broadway</p>
@@ -343,7 +431,6 @@
           <div class="consumer-card wide-card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
               <h3>My Orders History</h3>
-              <button id="consumerLogoutBtnHist" class="secondary-btn" style="padding: 4px 10px; font-size: 11px;">Logout</button>
             </div>
             <p class="card-subtitle">Showing all orders across SaaS tenant partitions.</p>
             <div class="order-history-list" id="consumerHistoryList" style="display: flex; flex-direction: column; gap: 12px; margin-top: 14px;">
@@ -364,6 +451,13 @@
             <div class="price-row"><span>Tax (8%):</span><span id="cartTax">₹0.00</span></div>
             <hr>
             <div class="price-row total-row"><span>Total:</span><span id="cartTotal">₹0.00</span></div>
+          </div>
+          <div class="form-group" style="margin-top: 14px; margin-bottom: 14px;">
+            <label for="cartFulfillmentType" style="font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Fulfillment Method</label>
+            <select id="cartFulfillmentType" style="background: var(--bg-secondary); border: 1px solid var(--bg-tertiary); color: var(--text-main); font-size: 13px; padding: 8px; width: 100%; margin-top: 4px; border-radius: 4px;">
+              <option value="DELIVERY" id="fulfillmentOptionDelivery">Proximity Driver Delivery (₹35.00)</option>
+              <option value="PICKUP" id="fulfillmentOptionPickup">Self-Pickup at Outlet (₹0.00)</option>
+            </select>
           </div>
           <div class="form-group" style="margin-top: 14px; margin-bottom: 14px;">
             <label for="cartPaymentMethod" style="font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Payment Method</label>
@@ -457,23 +551,74 @@
 
     <!-- 4. DRIVER APP VIEW -->
     <section class="view-panel" id="panel-DRIVER">
-      <div class="panel-header">
-        <div class="header-action-group">
-          <div>
-            <h2>Driver Logistics Client</h2>
-            <p>Go online to receive proximity-based dispatch assignments, and update routes in real-time.</p>
-          </div>
-          <div class="driver-login-switcher">
-            <label for="activeDriverSelect">Active Driver Login:</label>
-            <select id="activeDriverSelect">
-              <option value="usr_driver_1">Driver 1: Dave Fast (Motorcycle)</option>
-              <option value="usr_driver_2">Driver 2: Dan Quick (Bicycle)</option>
-            </select>
-          </div>
+      
+      <!-- Driver Authentication Gate -->
+      <div id="driverAuthGate" style="display: none; max-width: 450px; margin: 40px auto;">
+        <div class="admin-card">
+          <h3 id="driverAuthTitle">Driver Partner Login</h3>
+          <p class="card-subtitle" id="driverAuthSubtitle" style="margin-bottom: 20px;">Sign in to accept delivery jobs and track routes.</p>
+          
+          <!-- Driver Login Form -->
+          <form id="driverLoginForm" class="styled-form">
+            <div class="form-group">
+              <label for="driverLoginEmail">Email or Mobile Number</label>
+              <input type="text" id="driverLoginEmail" placeholder="e.g. 111-222-3333 or driver@saas.com" required>
+            </div>
+            <div class="form-group">
+              <label for="driverLoginPassword">Password</label>
+              <input type="password" id="driverLoginPassword" placeholder="••••••••" required>
+            </div>
+            <button type="submit" class="primary-btn">Sign In</button>
+            <p style="font-size: 12px; text-align: center; margin-top: 10px; color: var(--text-secondary);">
+              Want to partner with us? <a href="#" id="showDriverRegisterBtn" class="text-btn">Register as Driver</a>
+            </p>
+          </form>
+
+          <!-- Driver Register Form (hidden initially) -->
+          <form id="driverRegisterForm" class="styled-form" style="display: none;">
+            <div class="form-group">
+              <label for="driverRegEmail">Email Address</label>
+              <input type="email" id="driverRegEmail" placeholder="yourname@gmail.com" required>
+            </div>
+            <div class="form-group">
+              <label for="driverRegPassword">Password</label>
+              <input type="password" id="driverRegPassword" placeholder="••••••••" required>
+            </div>
+            <div style="display: flex; gap: 12px;">
+              <div class="form-group" style="flex: 1;">
+                <label for="driverRegFirstName">First Name</label>
+                <input type="text" id="driverRegFirstName" placeholder="John" required>
+              </div>
+              <div class="form-group" style="flex: 1;">
+                <label for="driverRegLastName">Last Name</label>
+                <input type="text" id="driverRegLastName" placeholder="Doe" required>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="driverRegPhone">Mobile Number (used for login)</label>
+              <input type="text" id="driverRegPhone" placeholder="e.g. 111-222-3333" required>
+            </div>
+            <button type="submit" class="primary-btn green-btn">Register as Partner</button>
+            <p style="font-size: 12px; text-align: center; margin-top: 10px; color: var(--text-secondary);">
+              Already registered? <a href="#" id="showDriverLoginBtn" class="text-btn">Sign in instead</a>
+            </p>
+          </form>
+          <div id="driverAuthStatusMessage" class="status-message" style="margin-top: 15px;"></div>
         </div>
       </div>
 
-      <div class="driver-grid">
+      <!-- Driver Main App Console -->
+      <div id="driverMainDashboard" style="display: block;">
+        <div class="panel-header">
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; gap: 16px;">
+            <div>
+              <h2>Driver Logistics Client</h2>
+              <p>Go online to receive proximity-based dispatch assignments, and update routes in real-time.</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="driver-grid">
         <!-- Status Panel -->
         <div class="driver-card">
           <h3>Availability Console</h3>
@@ -526,6 +671,7 @@
             </div>
           </div>
         </div>
+      </div>
       </div>
     </section>
 

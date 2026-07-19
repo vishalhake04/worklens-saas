@@ -11,6 +11,8 @@ const state = {
   
   // Platform Admin Data
   tenants: [],
+  platformAdminToken: localStorage.getItem('platformAdminToken'),
+  platformAdminUser: JSON.parse(localStorage.getItem('platformAdminUser') || 'null'),
 
   // Tenant Admin Data
   activeTenantId: 'tenant_1',
@@ -18,6 +20,8 @@ const state = {
   tenantMenu: [],
   editingDishImages: [], // Holds array of uploaded photo paths for the dish form
   activeDetailPhotoIndex: 0, // Current active image index in the details slider
+  tenantToken: localStorage.getItem('tenantToken'),
+  tenantUser: JSON.parse(localStorage.getItem('tenantUser') || 'null'),
 
   // Consumer Data
   restaurants: [],
@@ -32,6 +36,8 @@ const state = {
     total: 0
   },
   activeTrackingOrder: null, // { orderId, status, restLat, restLng, custLat, custLng, driverLat, driverLng, driverName }
+  consumerToken: localStorage.getItem('consumerToken'),
+  consumerUser: JSON.parse(localStorage.getItem('consumerUser') || 'null'),
 
   // Driver Data
   activeDriverId: 'usr_driver_1',
@@ -39,7 +45,9 @@ const state = {
   driverLocation: { lat: 40.7100, lng: -74.0150 }, // Starting point
   activeOffer: null,
   activeTrip: null, // { tenantId, orderId, restLat, restLng, destLat, destLng, status }
-  tripSimulationInterval: null
+  tripSimulationInterval: null,
+  driverToken: localStorage.getItem('driverToken'),
+  driverUser: JSON.parse(localStorage.getItem('driverUser') || 'null')
 };
 
 // Default Simulated Logins
@@ -74,11 +82,47 @@ function getSubdomain() {
   return null;
 }
 
+// Display block page for mismatched domain access attempts
+function showDomainBlockedMessage(msg) {
+  // Hide main header and container
+  const header = document.querySelector('.app-header');
+  if (header) header.style.display = 'none';
+  
+  const container = document.querySelector('.app-container');
+  if (container) container.style.display = 'none';
+  
+  document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+  
+  // Render blocked layout
+  const overlay = document.getElementById('domainBlockedOverlay');
+  if (overlay) {
+    overlay.style.display = 'flex';
+    document.getElementById('domainBlockedText').innerText = msg;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initUIHandlers();
   
-  // Resolve role from URL pathname
+  const subdomain = getSubdomain();
   const path = window.location.pathname;
+
+  // Domain context validation (Security Boundary Checks)
+  if (!subdomain) {
+    // We are on the MAIN DOMAIN
+    if (path === '/tenant-admin' || path === '/driver' || path === '/storefront') {
+      showDomainBlockedMessage("Access Denied: Mismatched domain context. Tenant Admins, Consumers, and Drivers must access the system via their respective restaurant subdomains (e.g., tenant_1.localhost:3000).");
+      return;
+    }
+  } else {
+    // We are on a TENANT SUBDOMAIN
+    if (path === '/platform-admin') {
+      showDomainBlockedMessage("Access Denied: The Platform Admin console must only be accessed from the main domain (e.g., localhost:3000).");
+      return;
+    }
+  }
+
+  // Resolve role from URL pathname
   if (path === '/platform-admin') {
     state.activeRole = 'PLATFORM_ADMIN';
   } else if (path === '/tenant-admin') {
@@ -89,11 +133,10 @@ document.addEventListener('DOMContentLoaded', () => {
     state.activeRole = 'CONSUMER';
   }
 
-  const subdomain = getSubdomain();
   if (subdomain) {
     state.activeTenantId = subdomain;
     // Storefront subdomains default to Consumer, unless specifically visiting a role path
-    if (path !== '/tenant-admin') {
+    if (path !== '/tenant-admin' && path !== '/driver') {
       state.activeRole = 'CONSUMER';
     }
     
@@ -139,22 +182,65 @@ function initUIHandlers() {
   // Onboard Tenant Form
   document.getElementById('onboardTenantForm').addEventListener('submit', handleOnboardTenantSubmit);
 
+  // Platform Admin Tab Switching
+  document.getElementById('platformTenantListTabBtn').addEventListener('click', () => {
+    switchPlatformTab('LIST');
+  });
+  document.getElementById('platformAddTenantTabBtn').addEventListener('click', () => {
+    switchPlatformTab('ADD');
+  });
+
   // Tenant select switcher
   document.getElementById('activeTenantSelect').addEventListener('change', (e) => {
     state.activeTenantId = e.target.value;
     refreshTenantDashboard();
   });
 
-  // Driver login switcher
-  document.getElementById('activeDriverSelect').addEventListener('change', (e) => {
-    state.activeDriverId = e.target.value;
-    // Disconnect old socket, re-login as new driver
-    if (state.socket) state.socket.close();
+  // Driver Auth forms switcher links
+  document.getElementById('showDriverRegisterBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('driverLoginForm').style.display = 'none';
+    document.getElementById('driverRegisterForm').style.display = 'block';
+    document.getElementById('driverAuthTitle').innerText = 'Register as Driver';
+    document.getElementById('driverAuthSubtitle').innerText = 'Join Work Lens platform to deliver food.';
+    document.getElementById('driverAuthStatusMessage').innerText = '';
+  });
+
+  document.getElementById('showDriverLoginBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('driverRegisterForm').style.display = 'none';
+    document.getElementById('driverLoginForm').style.display = 'block';
+    document.getElementById('driverAuthTitle').innerText = 'Driver Partner Login';
+    document.getElementById('driverAuthSubtitle').innerText = 'Sign in to accept delivery jobs and track routes.';
+    document.getElementById('driverAuthStatusMessage').innerText = '';
+  });
+
+  // Driver Login Form Submit
+  document.getElementById('driverLoginForm').addEventListener('submit', handleDriverLoginSubmit);
+
+  // Driver Register Form Submit
+  document.getElementById('driverRegisterForm').addEventListener('submit', handleDriverRegisterSubmit);
+
+  // Driver Logout Button Click
+  document.getElementById('driverLogoutBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    state.driverToken = null;
+    state.driverUser = null;
+    localStorage.removeItem('driverToken');
+    localStorage.removeItem('driverUser');
     loginAndSwitchRole('DRIVER');
   });
 
   // Basket checkout button
   document.getElementById('checkoutBtn').addEventListener('click', handleCartCheckout);
+
+  // Fulfillment option change
+  const cartFulfillSelect = document.getElementById('cartFulfillmentType');
+  if (cartFulfillSelect) {
+    cartFulfillSelect.addEventListener('change', () => {
+      recalculateCart();
+    });
+  }
 
   // Consumer back button
   document.getElementById('backToStoresBtn').addEventListener('click', () => {
@@ -167,9 +253,10 @@ function initUIHandlers() {
     document.getElementById('orderTrackingPanel').style.display = 'none';
     const consumerGrid = document.querySelector('.consumer-grid');
     consumerGrid.classList.remove('tracking-active');
-    document.getElementById('storefrontDiscoverPanel').style.display = 'block';
-    document.getElementById('shoppingCartPanel').style.display = 'block';
     state.activeTrackingOrder = null;
+    
+    // Refresh dashboard layout to display correct menu list/subdomain context
+    loginAndSwitchRole('CONSUMER');
   });
 
   // Driver Online toggle button
@@ -192,6 +279,14 @@ function initUIHandlers() {
   // Modal handlers
   document.getElementById('closeModalBtn').addEventListener('click', () => {
     document.getElementById('modifierModal').style.display = 'none';
+  });
+
+  // Consumer Auth Modal open/close
+  document.getElementById('consumerHeaderLoginBtn').addEventListener('click', () => {
+    document.getElementById('consumerAuthModal').style.display = 'block';
+  });
+  document.getElementById('closeConsumerAuthModalBtn').addEventListener('click', () => {
+    document.getElementById('consumerAuthModal').style.display = 'none';
   });
 
   // Consumer Auth forms switcher links
@@ -224,11 +319,11 @@ function initUIHandlers() {
     e.preventDefault();
     state.consumerToken = null;
     state.consumerUser = null;
+    localStorage.removeItem('consumerToken');
+    localStorage.removeItem('consumerUser');
     loginAndSwitchRole('CONSUMER');
   };
-  document.getElementById('consumerLogoutBtn').addEventListener('click', handleLogout);
-  document.getElementById('consumerLogoutBtnSub').addEventListener('click', handleLogout);
-  document.getElementById('consumerLogoutBtnHist').addEventListener('click', handleLogout);
+  document.getElementById('consumerHeaderLogoutBtn').addEventListener('click', handleLogout);
 
   // Consumer tab switch listeners
   document.getElementById('consumerStoresTabBtn').addEventListener('click', () => {
@@ -288,12 +383,36 @@ function initUIHandlers() {
     switchTenantTab('CONSUMERS');
   });
 
+  document.getElementById('tenantSettingsTabBtn').addEventListener('click', () => {
+    switchTenantTab('SETTINGS');
+  });
+
+  const tenantSettingsForm = document.getElementById('tenantSettingsForm');
+  if (tenantSettingsForm) {
+    tenantSettingsForm.addEventListener('submit', handleTenantSettingsSubmit);
+  }
+
   // Tenant Logout Button Click
   document.getElementById('tenantLogoutBtn').addEventListener('click', (e) => {
     e.preventDefault();
     state.tenantToken = null;
     state.tenantUser = null;
+    localStorage.removeItem('tenantToken');
+    localStorage.removeItem('tenantUser');
     loginAndSwitchRole('TENANT_ADMIN');
+  });
+
+  // Platform Admin Login Form Submit
+  document.getElementById('platformLoginForm').addEventListener('submit', handlePlatformLoginSubmit);
+
+  // Platform Admin Logout Button Click
+  document.getElementById('platformLogoutBtn').addEventListener('click', (e) => {
+    e.preventDefault();
+    state.platformAdminToken = null;
+    state.platformAdminUser = null;
+    localStorage.removeItem('platformAdminToken');
+    localStorage.removeItem('platformAdminUser');
+    loginAndSwitchRole('PLATFORM_ADMIN');
   });
 
   // Add Category Button Click
@@ -337,17 +456,27 @@ function initUIHandlers() {
 async function loginAndSwitchRole(role) {
   state.activeRole = role;
 
-  // Handle CONSUMER role (requires Auth Gate logic instead of auto-login)
-  if (role === 'CONSUMER') {
+  // Reset top-right header auth buttons visibility
+  const headerLoginBtn = document.getElementById('consumerHeaderLoginBtn');
+  const headerLogoutBtn = document.getElementById('consumerHeaderLogoutBtn');
+  const headerPlatformLogout = document.getElementById('platformLogoutBtn');
+  const headerDriverLogout = document.getElementById('driverLogoutBtn');
+  if (headerLoginBtn) headerLoginBtn.style.display = 'none';
+  if (headerLogoutBtn) headerLogoutBtn.style.display = 'none';
+  if (headerPlatformLogout) headerPlatformLogout.style.display = 'none';
+  if (headerDriverLogout) headerDriverLogout.style.display = 'none';
+
+  // Handle PLATFORM_ADMIN role (requires Auth Gate logic)
+  if (role === 'PLATFORM_ADMIN') {
     // Switch Panel Views
     document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
     document.getElementById(`panel-${role}`).classList.add('active');
 
-    if (!state.consumerToken) {
-      // Show login form, hide consumer main app
-      document.getElementById('consumerAuthGate').style.display = 'block';
-      document.getElementById('consumerMainDashboard').style.display = 'none';
-      document.getElementById('currentUserLabel').innerText = 'Guest Diner (Logged Out)';
+    if (!state.platformAdminToken) {
+      // Show login form, hide platform main dashboard
+      document.getElementById('platformAuthGate').style.display = 'block';
+      document.getElementById('platformMainDashboard').style.display = 'none';
+      document.getElementById('currentUserLabel').innerText = 'Guest Platform (Logged Out)';
       state.token = null;
       state.user = null;
       if (state.socket) {
@@ -356,16 +485,61 @@ async function loginAndSwitchRole(role) {
       }
     } else {
       // Show main app, hide auth gate
-      document.getElementById('consumerAuthGate').style.display = 'none';
-      document.getElementById('consumerMainDashboard').style.display = 'grid';
+      document.getElementById('platformAuthGate').style.display = 'none';
+      document.getElementById('platformMainDashboard').style.display = 'block';
+      
+      state.token = state.platformAdminToken;
+      state.user = state.platformAdminUser;
+      
+      document.getElementById('currentUserLabel').innerText = `${state.user.firstName} (${state.user.role})`;
+      if (headerPlatformLogout) headerPlatformLogout.style.display = 'inline-block';
+      
+      connectWebSocket();
+      switchPlatformTab('LIST');
+    }
+    return;
+  }
+
+  // Handle CONSUMER role (requires Auth Gate logic instead of auto-login)
+  if (role === 'CONSUMER') {
+    // Switch Panel Views
+    document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById(`panel-${role}`).classList.add('active');
+
+    // Switch View to main dashboard always (can browse/add to cart without logging in!)
+    document.getElementById('consumerMainDashboard').style.display = 'grid';
+
+    if (!state.consumerToken) {
+      document.getElementById('currentUserLabel').innerText = 'Guest Diner (Logged Out)';
+      document.getElementById('consumerHeaderLoginBtn').style.display = 'inline-block'; // Show manual login button
+      document.getElementById('consumerHeaderLogoutBtn').style.display = 'none'; // Hide manual logout button
+      state.token = null;
+      state.user = null;
+      
+      // Clear socket if exists
+      if (state.socket) {
+        state.socket.close();
+        state.socket = null;
+      }
+
+      // Allow viewing storefront stores selection
+      switchConsumerTab('STORES');
+      refreshConsumerDashboard();
+    } else {
+      document.getElementById('consumerHeaderLoginBtn').style.display = 'none'; // Hide manual login button
+      document.getElementById('consumerHeaderLogoutBtn').style.display = 'inline-block'; // Show manual logout button
       
       state.token = state.consumerToken;
       state.user = state.consumerUser;
       
       document.getElementById('currentUserLabel').innerText = `${state.user.firstName} (${state.user.role})`;
       
-      // Default to STORES tab view on login
-      switchConsumerTab('STORES');
+      // Keep or default tab
+      if (!state.activeConsumerTab) {
+        switchConsumerTab('STORES');
+      } else {
+        switchConsumerTab(state.activeConsumerTab);
+      }
       
       connectWebSocket();
       refreshConsumerDashboard();
@@ -418,52 +592,40 @@ async function loginAndSwitchRole(role) {
     }
     return;
   }
-  
-  // Resolve correct login payload for other simulated roles
-  let loginPayload = null;
+
+  // Handle DRIVER role (requires Auth Gate logic)
   if (role === 'DRIVER') {
-    loginPayload = DEFAULT_USERS[role][state.activeDriverId];
-  } else {
-    loginPayload = DEFAULT_USERS[role];
-  }
-
-  try {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(loginPayload)
-    });
-    const data = await response.json();
-
-    if (data.error) {
-      alert(`Login failed: ${data.error}`);
-      return;
-    }
-
-    state.token = data.token;
-    state.user = data.user;
-
-    // Update Header labels
-    document.getElementById('currentUserLabel').innerText = `${data.user.firstName} (${data.user.role})`;
-    
-    // Connect WebSockets
-    connectWebSocket();
-
     // Switch Panel Views
     document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
     document.getElementById(`panel-${role}`).classList.add('active');
 
-    // Load panel-specific content
-    if (role === 'PLATFORM_ADMIN') {
-      refreshPlatformAdminDashboard();
-    } else if (role === 'TENANT_ADMIN') {
-      refreshTenantDashboard();
-    } else if (role === 'DRIVER') {
+    if (!state.driverToken) {
+      // Show login form, hide driver main app
+      document.getElementById('driverAuthGate').style.display = 'block';
+      document.getElementById('driverMainDashboard').style.display = 'none';
+      document.getElementById('currentUserLabel').innerText = 'Guest Driver (Logged Out)';
+      
+      state.token = null;
+      state.user = null;
+      if (state.socket) {
+        state.socket.close();
+        state.socket = null;
+      }
+    } else {
+      // Show main app, hide auth gate
+      document.getElementById('driverAuthGate').style.display = 'none';
+      document.getElementById('driverMainDashboard').style.display = 'block';
+      
+      state.token = state.driverToken;
+      state.user = state.driverUser;
+      
+      document.getElementById('currentUserLabel').innerText = `${state.user.firstName} (${state.user.role})`;
+      if (headerDriverLogout) headerDriverLogout.style.display = 'inline-block';
+      
+      connectWebSocket();
       refreshDriverDashboard();
     }
-
-  } catch (err) {
-    console.error('Auth error:', err);
+    return;
   }
 }
 
@@ -703,7 +865,11 @@ function renderTenantOrders() {
     } else if (o.status === 'PREPARING') {
       actionBtnHtml = `<button class="primary-btn amber-btn" style="background-color: var(--accent-amber); color: black;" onclick="transitionOrderStatus('${o.id}', 'READY')">Food Prepared</button>`;
     } else if (o.status === 'READY') {
-      actionBtnHtml = `<span class="badge pending">Awaiting Delivery Partner Pickup</span>`;
+      if (o.fulfillment_type === 'PICKUP') {
+        actionBtnHtml = `<button class="primary-btn green-btn" onclick="transitionOrderStatus('${o.id}', 'DELIVERED')">Complete Pickup</button>`;
+      } else {
+        actionBtnHtml = `<span class="badge pending">Awaiting Delivery Partner Pickup</span>`;
+      }
     } else if (o.status === 'DISPATCHED') {
       actionBtnHtml = `<span class="badge active">Out for Delivery</span>`;
     } else if (o.status === 'DELIVERED') {
@@ -714,12 +880,16 @@ function renderTenantOrders() {
 
     const driverName = o.delivery ? `Driver #${o.delivery.driver_id}` : 'Unassigned';
     let logisticsHtml = '';
-    if (o.status === 'PLACED') {
-      logisticsHtml = 'Waiting acceptance';
-    } else if (o.status === 'ACCEPTED' || o.status === 'PREPARING') {
-      logisticsHtml = `<span class="badge pending">${o.delivery ? `${o.delivery.status}` : 'Searching for Drivers...'}</span>`;
+    if (o.fulfillment_type === 'PICKUP') {
+      logisticsHtml = `<span class="badge warning" style="background: rgba(16, 185, 129, 0.1); color: var(--accent-green); border: 1px solid var(--accent-green);">Self Pickup Pass: <strong>${o.pickup_code}</strong></span>`;
     } else {
-      logisticsHtml = `<span class="badge active">${o.delivery ? `${o.delivery.status} (${driverName})` : 'Self pickup'}</span>`;
+      if (o.status === 'PLACED') {
+        logisticsHtml = 'Waiting acceptance';
+      } else if (o.status === 'ACCEPTED' || o.status === 'PREPARING') {
+        logisticsHtml = `<span class="badge pending">${o.delivery ? `${o.delivery.status}` : 'Searching for Drivers...'}</span>`;
+      } else {
+        logisticsHtml = `<span class="badge active">${o.delivery ? `${o.delivery.status} (${driverName})` : 'Self pickup'}</span>`;
+      }
     }
 
     const tr = document.createElement('tr');
@@ -792,6 +962,19 @@ function renderTenantMenu() {
 
 // Global functions exposed to inline clicks (called from generated HTML tables)
 window.transitionOrderStatus = async function(orderId, targetStatus) {
+  let pickupCode = null;
+  if (targetStatus === 'DELIVERED') {
+    const order = state.tenantOrders.find(o => o.id === orderId);
+    if (order && order.fulfillment_type === 'PICKUP') {
+      pickupCode = prompt("Enter the 6-digit Customer Self-Pickup Pass Code to authorize delivery confirmation:");
+      if (pickupCode === null) return; // User cancelled prompt
+      if (!pickupCode.trim()) {
+        alert("Verification code is required to complete self-pickup.");
+        return;
+      }
+    }
+  }
+
   try {
     const response = await fetch(`/api/tenant/orders/${orderId}/transition`, {
       method: 'POST',
@@ -800,7 +983,7 @@ window.transitionOrderStatus = async function(orderId, targetStatus) {
         'Authorization': `Bearer ${state.token}`,
         'X-Tenant-ID': state.activeTenantId
       },
-      body: JSON.stringify({ targetStatus })
+      body: JSON.stringify({ targetStatus, pickupCode })
     });
     const data = await response.json();
     if (data.error) {
@@ -835,9 +1018,6 @@ window.toggleItemAvailability = async function(itemId, isAvailable) {
 // ==========================================
 
 async function refreshConsumerDashboard() {
-  // Clear cart on role enter
-  resetCart();
-
   const subdomain = getSubdomain();
 
   try {
@@ -889,6 +1069,22 @@ async function loadConsumerStoreMenu(store) {
 
   document.getElementById('currentStoreName').innerText = store.name;
   document.getElementById('currentStoreAddress').innerText = store.address;
+
+  // Toggle fulfillment options based on store settings
+  const optDel = document.getElementById('fulfillmentOptionDelivery');
+  const optPic = document.getElementById('fulfillmentOptionPickup');
+  const selectFulfill = document.getElementById('cartFulfillmentType');
+  
+  if (optDel) optDel.disabled = (store.deliveryEnabled === 0);
+  if (optPic) optPic.disabled = (store.pickupEnabled === 0);
+  
+  if (selectFulfill) {
+    if (store.deliveryEnabled !== 0) {
+      selectFulfill.value = 'DELIVERY';
+    } else if (store.pickupEnabled !== 0) {
+      selectFulfill.value = 'PICKUP';
+    }
+  }
 
   try {
     const response = await fetch(`/api/storefront/restaurants/${store.tenantId}/menu`);
@@ -1066,7 +1262,9 @@ function recalculateCart() {
     container.appendChild(row);
   });
 
-  const deliveryFee = 350;
+  const fulfillmentSelect = document.getElementById('cartFulfillmentType');
+  const fulfillmentType = fulfillmentSelect ? fulfillmentSelect.value : 'DELIVERY';
+  const deliveryFee = (fulfillmentType === 'PICKUP') ? 0 : 350;
   const tax = Math.round(subtotal * 0.08);
   const total = subtotal + deliveryFee + tax;
 
@@ -1100,6 +1298,12 @@ function resetCart() {
 }
 
 async function handleCartCheckout() {
+  if (!state.consumerToken) {
+    document.getElementById('consumerAuthModal').style.display = 'block';
+    alert('Please sign in or create an account to place your order.');
+    return;
+  }
+
   const checkoutBtn = document.getElementById('checkoutBtn');
   const paymentMethod = document.getElementById('cartPaymentMethod').value;
   
@@ -1128,12 +1332,16 @@ async function handleCartCheckout() {
   checkoutBtn.innerText = authMessage;
 
   try {
+    const fulfillmentSelect = document.getElementById('cartFulfillmentType');
+    const fulfillmentType = fulfillmentSelect ? fulfillmentSelect.value : 'DELIVERY';
+
     const payload = {
       restaurantId: state.cart.restaurantId,
       items: state.cart.items,
       paymentMethod,
+      fulfillmentType,
       // Default delivery details mock coordinates (NY Midtown)
-      deliveryAddress: '15 Penn Plaza, New York, NY 10001',
+      deliveryAddress: fulfillmentType === 'PICKUP' ? 'Self-Pickup at Outlet' : '15 Penn Plaza, New York, NY 10001',
       deliveryLat: 40.7500 + (Math.random() - 0.5) * 0.01,
       deliveryLng: -73.9900 + (Math.random() - 0.5) * 0.01
     };
@@ -1168,7 +1376,9 @@ async function handleCartCheckout() {
       custLng: payload.deliveryLng,
       driverLat: null,
       driverLng: null,
-      driverName: null
+      driverName: null,
+      fulfillmentType: payload.fulfillmentType,
+      pickupCode: data.pickupCode
     };
 
     // Open Tracking UI
@@ -1184,6 +1394,9 @@ async function handleCartCheckout() {
     document.getElementById('trackingRestaurantLabel').innerText = `Restaurant: ${state.selectedRestaurant.name}`;
     document.getElementById('trackingDriverLabel').innerText = `Delivery Partner: Searching for nearby drivers...`;
 
+    // Clear cart upon successful order placement
+    resetCart();
+
     updateTrackingProgressSteps('PLACED');
     renderTrackingMap();
 
@@ -1196,11 +1409,19 @@ async function handleCartCheckout() {
 function updateTrackingProgressSteps(status) {
   document.getElementById('trackingStatusBadge').innerText = status;
 
+  const isPickup = state.activeTrackingOrder && state.activeTrackingOrder.fulfillmentType === 'PICKUP';
   const steps = ['PLACED', 'ACCEPTED', 'PREPARING', 'READY', 'DISPATCHED', 'DELIVERED'];
   const currentIdx = steps.indexOf(status);
 
+  // Toggle DISPATCHED step visibility for pickup orders
+  const dispatchedStep = document.getElementById('step-DISPATCHED');
+  if (dispatchedStep) {
+    dispatchedStep.style.display = isPickup ? 'none' : 'flex';
+  }
+
   steps.forEach((step, idx) => {
     const element = document.getElementById(`step-${step}`);
+    if (!element) return;
     if (idx < currentIdx) {
       element.className = 'progress-step completed';
     } else if (idx === currentIdx) {
@@ -1209,6 +1430,43 @@ function updateTrackingProgressSteps(status) {
       element.className = 'progress-step';
     }
   });
+
+  // Dynamically display pickup pass code card to the consumer
+  const passContainerId = 'trackingPickupPassCodeContainer';
+  let passContainer = document.getElementById(passContainerId);
+  if (!passContainer) {
+    const trackingCard = document.getElementById('orderTrackingPanel');
+    if (trackingCard) {
+      passContainer = document.createElement('div');
+      passContainer.id = passContainerId;
+      passContainer.style.marginTop = '15px';
+      passContainer.style.padding = '12px';
+      passContainer.style.background = 'rgba(245, 158, 11, 0.1)';
+      passContainer.style.border = '1px solid var(--accent-amber)';
+      passContainer.style.borderRadius = '6px';
+      passContainer.style.textAlign = 'center';
+      
+      const label = document.getElementById('trackingDriverLabel');
+      if (label && label.parentNode) {
+        label.parentNode.insertBefore(passContainer, label.nextSibling);
+      }
+    }
+  }
+
+  if (passContainer) {
+    if (isPickup) {
+      passContainer.style.display = 'block';
+      const code = state.activeTrackingOrder.pickupCode || 'Generating...';
+      passContainer.innerHTML = `
+        <span style="display: block; font-size: 11px; text-transform: uppercase; color: var(--text-secondary); font-weight: 600;">Self-Pickup Pass Code</span>
+        <strong style="display: block; font-size: 24px; color: var(--accent-green); margin: 6px 0; letter-spacing: 2px;">${code}</strong>
+        <span style="display: block; font-size: 12px; color: var(--text-main);">Present this code at the counter to verify your pickup.</span>
+      `;
+      document.getElementById('trackingDriverLabel').innerText = 'Fulfillment Mode: Self-Pickup';
+    } else {
+      passContainer.style.display = 'none';
+    }
+  }
 }
 
 function renderTrackingMap() {
@@ -1710,9 +1968,66 @@ async function handleConsumerLoginSubmit(e) {
       return;
     }
 
-    // Set consumer session state
+    // Automatically switch roles and panels based on authenticated user's role
+    if (data.user.role === 'TENANT_ADMIN') {
+      state.tenantToken = data.token;
+      state.tenantUser = data.user;
+      localStorage.setItem('tenantToken', data.token);
+      localStorage.setItem('tenantUser', JSON.stringify(data.user));
+      
+      document.getElementById('consumerAuthModal').style.display = 'none';
+      document.getElementById('consumerLoginForm').reset();
+      statusDiv.innerText = '';
+      
+      history.pushState(null, '', '/tenant-admin');
+      loginAndSwitchRole('TENANT_ADMIN');
+      return;
+    }
+
+    if (data.user.role === 'DRIVER') {
+      state.driverToken = data.token;
+      state.driverUser = data.user;
+      localStorage.setItem('driverToken', data.token);
+      localStorage.setItem('driverUser', JSON.stringify(data.user));
+      
+      document.getElementById('consumerAuthModal').style.display = 'none';
+      document.getElementById('consumerLoginForm').reset();
+      statusDiv.innerText = '';
+      
+      history.pushState(null, '', '/driver');
+      loginAndSwitchRole('DRIVER');
+      return;
+    }
+
+    if (data.user.role === 'PLATFORM_ADMIN') {
+      const subdomain = getSubdomain();
+      if (subdomain) {
+        statusDiv.style.color = 'var(--accent-red)';
+        statusDiv.innerText = 'Platform Admin must log in via the main domain (localhost:3000).';
+        return;
+      }
+      state.platformAdminToken = data.token;
+      state.platformAdminUser = data.user;
+      localStorage.setItem('platformAdminToken', data.token);
+      localStorage.setItem('platformAdminUser', JSON.stringify(data.user));
+      
+      document.getElementById('consumerAuthModal').style.display = 'none';
+      document.getElementById('consumerLoginForm').reset();
+      statusDiv.innerText = '';
+      
+      history.pushState(null, '', '/platform-admin');
+      loginAndSwitchRole('PLATFORM_ADMIN');
+      return;
+    }
+
+    // Default: Set consumer session state
     state.consumerToken = data.token;
     state.consumerUser = data.user;
+    localStorage.setItem('consumerToken', data.token);
+    localStorage.setItem('consumerUser', JSON.stringify(data.user));
+
+    // Hide Auth Modal
+    document.getElementById('consumerAuthModal').style.display = 'none';
 
     // Clear form
     document.getElementById('consumerLoginForm').reset();
@@ -1760,6 +2075,11 @@ async function handleConsumerRegisterSubmit(e) {
     // Set consumer session state (auto login)
     state.consumerToken = data.token;
     state.consumerUser = data.user;
+    localStorage.setItem('consumerToken', data.token);
+    localStorage.setItem('consumerUser', JSON.stringify(data.user));
+
+    // Hide Auth Modal
+    document.getElementById('consumerAuthModal').style.display = 'none';
 
     // Clear form
     document.getElementById('consumerRegisterForm').reset();
@@ -1772,6 +2092,101 @@ async function handleConsumerRegisterSubmit(e) {
     statusDiv.className = 'status-message error-message';
     statusDiv.style.color = 'var(--accent-red)';
     statusDiv.innerText = `Registration exception: ${err.message}`;
+  }
+}
+
+async function handleDriverLoginSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById('driverLoginEmail').value.trim();
+  const password = document.getElementById('driverLoginPassword').value.trim();
+  const statusDiv = document.getElementById('driverAuthStatusMessage');
+
+  statusDiv.style.color = 'var(--text-secondary)';
+  statusDiv.innerText = 'Signing in...';
+
+  try {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, tenantId: state.activeTenantId })
+    });
+    const data = await response.json();
+
+    if (data.error) {
+      statusDiv.style.color = 'var(--accent-red)';
+      statusDiv.innerText = `Login failed: ${data.error}`;
+      return;
+    }
+
+    if (data.user.role !== 'DRIVER') {
+      statusDiv.style.color = 'var(--accent-red)';
+      statusDiv.innerText = 'Access Denied: Requiring Driver role credentials.';
+      return;
+    }
+
+    // Capture and save driver session
+    state.driverToken = data.token;
+    state.driverUser = data.user;
+    localStorage.setItem('driverToken', data.token);
+    localStorage.setItem('driverUser', JSON.stringify(data.user));
+
+    // Clear form
+    document.getElementById('driverLoginForm').reset();
+    statusDiv.innerText = '';
+
+    // Switch View
+    loginAndSwitchRole('DRIVER');
+
+  } catch (err) {
+    console.error(err);
+    statusDiv.style.color = 'var(--accent-red)';
+    statusDiv.innerText = 'System error occurred.';
+  }
+}
+
+async function handleDriverRegisterSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById('driverRegEmail').value.trim();
+  const password = document.getElementById('driverRegPassword').value.trim();
+  const firstName = document.getElementById('driverRegFirstName').value.trim();
+  const lastName = document.getElementById('driverRegLastName').value.trim();
+  const phone = document.getElementById('driverRegPhone').value.trim();
+  const statusDiv = document.getElementById('driverAuthStatusMessage');
+
+  statusDiv.style.color = 'var(--text-secondary)';
+  statusDiv.innerText = 'Registering partner account...';
+
+  try {
+    const response = await fetch('/api/auth/register-driver', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, firstName, lastName, phone, tenantId: state.activeTenantId })
+    });
+    const data = await response.json();
+
+    if (data.error) {
+      statusDiv.style.color = 'var(--accent-red)';
+      statusDiv.innerText = `Registration failed: ${data.error}`;
+      return;
+    }
+
+    // Auto login registered driver
+    state.driverToken = data.token;
+    state.driverUser = data.user;
+    localStorage.setItem('driverToken', data.token);
+    localStorage.setItem('driverUser', JSON.stringify(data.user));
+
+    // Clear form
+    document.getElementById('driverRegisterForm').reset();
+    statusDiv.innerText = '';
+
+    // Switch View
+    loginAndSwitchRole('DRIVER');
+
+  } catch (err) {
+    console.error(err);
+    statusDiv.style.color = 'var(--accent-red)';
+    statusDiv.innerText = 'System error occurred.';
   }
 }
 
@@ -2078,6 +2493,55 @@ async function handleTenantEditFormSubmit() {
   }
 }
 
+async function handlePlatformLoginSubmit(e) {
+  e.preventDefault();
+  const email = document.getElementById('platformLoginEmail').value.trim();
+  const password = document.getElementById('platformLoginPassword').value.trim();
+  const statusDiv = document.getElementById('platformAuthStatusMessage');
+
+  statusDiv.style.color = 'var(--text-secondary)';
+  statusDiv.innerText = 'Signing in...';
+
+  try {
+    const response = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await response.json();
+
+    if (data.error) {
+      statusDiv.style.color = 'var(--accent-red)';
+      statusDiv.innerText = `Login failed: ${data.error}`;
+      return;
+    }
+
+    if (data.user.role !== 'PLATFORM_ADMIN') {
+      statusDiv.style.color = 'var(--accent-red)';
+      statusDiv.innerText = 'Access Denied: Requiring Platform Admin role credentials.';
+      return;
+    }
+
+    // Capture and save platform admin session
+    state.platformAdminToken = data.token;
+    state.platformAdminUser = data.user;
+    localStorage.setItem('platformAdminToken', data.token);
+    localStorage.setItem('platformAdminUser', JSON.stringify(data.user));
+
+    // Clear form
+    document.getElementById('platformLoginForm').reset();
+    statusDiv.innerText = '';
+
+    // Switch View
+    loginAndSwitchRole('PLATFORM_ADMIN');
+
+  } catch (err) {
+    console.error(err);
+    statusDiv.style.color = 'var(--accent-red)';
+    statusDiv.innerText = 'System error occurred.';
+  }
+}
+
 async function handleTenantLoginSubmit(e) {
   e.preventDefault();
   const email = document.getElementById('tenantLoginEmail').value.trim();
@@ -2118,6 +2582,8 @@ async function handleTenantLoginSubmit(e) {
     // Capture and save tenant session
     state.tenantToken = data.token;
     state.tenantUser = data.user;
+    localStorage.setItem('tenantToken', data.token);
+    localStorage.setItem('tenantUser', JSON.stringify(data.user));
 
     // Reset login form inputs
     document.getElementById('tenantLoginForm').reset();
@@ -2188,6 +2654,14 @@ function switchConsumerTab(tab) {
   const browsingContainer = document.getElementById('consumerBrowsingContainer');
   const historyContainer = document.getElementById('consumerHistoryContainer');
   const cartPanel = document.getElementById('shoppingCartPanel');
+
+  if (tab === 'HISTORY' && !state.consumerToken) {
+    document.getElementById('consumerAuthModal').style.display = 'block';
+    alert('Please sign in or create an account to view your order history.');
+    return;
+  }
+
+  state.activeConsumerTab = tab;
 
   if (tab === 'STORES') {
     storesBtn.className = 'primary-btn';
@@ -2292,7 +2766,9 @@ window.trackOrderLive = async function(orderId, tenantId) {
       custLng: trackingData.custLng,
       driverLat: trackingData.driverLat,
       driverLng: trackingData.driverLng,
-      driverName: trackingData.driverName
+      driverName: trackingData.driverName,
+      fulfillmentType: trackingData.fulfillmentType,
+      pickupCode: trackingData.pickupCode
     };
 
     // Toggle tabs back to STORES view
@@ -2458,32 +2934,51 @@ window.switchTenantTab = function(tab) {
   const ordersCard = document.getElementById('tenantOrdersCard');
   const menuCard = document.getElementById('tenantMenuCard');
   const consumersCard = document.getElementById('tenantConsumersCard');
+  const settingsCard = document.getElementById('tenantSettingsCard');
+  
   const ordersBtn = document.getElementById('tenantOrdersTabBtn');
   const menuBtn = document.getElementById('tenantMenuTabBtn');
   const consumersBtn = document.getElementById('tenantConsumersTabBtn');
+  const settingsBtn = document.getElementById('tenantSettingsTabBtn');
 
   if (tab === 'ORDERS') {
     ordersCard.style.display = 'block';
     menuCard.style.display = 'none';
     consumersCard.style.display = 'none';
+    if (settingsCard) settingsCard.style.display = 'none';
     ordersBtn.className = 'primary-btn';
     menuBtn.className = 'secondary-btn';
     consumersBtn.className = 'secondary-btn';
+    if (settingsBtn) settingsBtn.className = 'secondary-btn';
   } else if (tab === 'MENU') {
     ordersCard.style.display = 'none';
     menuCard.style.display = 'block';
     consumersCard.style.display = 'none';
+    if (settingsCard) settingsCard.style.display = 'none';
     ordersBtn.className = 'secondary-btn';
     menuBtn.className = 'primary-btn';
     consumersBtn.className = 'secondary-btn';
+    if (settingsBtn) settingsBtn.className = 'secondary-btn';
   } else if (tab === 'CONSUMERS') {
     ordersCard.style.display = 'none';
     menuCard.style.display = 'none';
     consumersCard.style.display = 'block';
+    if (settingsCard) settingsCard.style.display = 'none';
     ordersBtn.className = 'secondary-btn';
     menuBtn.className = 'secondary-btn';
     consumersBtn.className = 'primary-btn';
+    if (settingsBtn) settingsBtn.className = 'secondary-btn';
     fetchAndRenderTenantConsumers();
+  } else if (tab === 'SETTINGS') {
+    ordersCard.style.display = 'none';
+    menuCard.style.display = 'none';
+    consumersCard.style.display = 'none';
+    if (settingsCard) settingsCard.style.display = 'block';
+    ordersBtn.className = 'secondary-btn';
+    menuBtn.className = 'secondary-btn';
+    consumersBtn.className = 'secondary-btn';
+    if (settingsBtn) settingsBtn.className = 'primary-btn';
+    fetchAndLoadTenantSettings();
   }
 };
 
@@ -2532,6 +3027,100 @@ async function fetchAndRenderTenantConsumers() {
     console.error('Failed to load registered consumers directory:', err);
     tbody.innerHTML = '<tr><td colspan="6" class="empty-message error-message">Failed to load consumer directory list.</td></tr>';
     countLabel.innerText = 'Error';
+  }
+}
+
+window.switchPlatformTab = function(tab) {
+  const listTab = document.getElementById('platformTenantListTab');
+  const addTab = document.getElementById('platformAddTenantTab');
+  const listBtn = document.getElementById('platformTenantListTabBtn');
+  const addBtn = document.getElementById('platformAddTenantTabBtn');
+
+  if (tab === 'LIST') {
+    if (listTab) listTab.style.display = 'block';
+    if (addTab) addTab.style.display = 'none';
+    if (listBtn) {
+      listBtn.style.background = 'var(--bg-tertiary)';
+      listBtn.style.color = 'var(--text-main)';
+    }
+    if (addBtn) {
+      addBtn.style.background = 'none';
+      addBtn.style.color = 'var(--text-secondary)';
+    }
+    refreshPlatformAdminDashboard();
+  } else if (tab === 'ADD') {
+    if (listTab) listTab.style.display = 'none';
+    if (addTab) addTab.style.display = 'block';
+    if (listBtn) {
+      listBtn.style.background = 'none';
+      listBtn.style.color = 'var(--text-secondary)';
+    }
+    if (addBtn) {
+      addBtn.style.background = 'var(--bg-tertiary)';
+      addBtn.style.color = 'var(--text-main)';
+    }
+  }
+}
+
+async function fetchAndLoadTenantSettings() {
+  const statusMsg = document.getElementById('tenantSettingsStatusMessage');
+  if (statusMsg) statusMsg.innerText = 'Loading storefront configuration...';
+
+  try {
+    const response = await fetch('/api/tenant/settings', {
+      headers: {
+        'Authorization': `Bearer ${state.token}`,
+        'X-Tenant-ID': state.activeTenantId
+      }
+    });
+    const settings = await response.json();
+    
+    document.getElementById('settingAllowDelivery').checked = settings.delivery_enabled !== 0;
+    document.getElementById('settingAllowPickup').checked = settings.pickup_enabled !== 0;
+    
+    if (statusMsg) statusMsg.innerText = '';
+  } catch (err) {
+    console.error('Failed to load settings:', err);
+    if (statusMsg) {
+      statusMsg.innerText = 'Failed to load storefront settings.';
+      statusMsg.className = 'status-message error-message';
+    }
+  }
+}
+
+async function handleTenantSettingsSubmit(e) {
+  e.preventDefault();
+  const statusMsg = document.getElementById('tenantSettingsStatusMessage');
+  if (statusMsg) {
+    statusMsg.innerText = 'Saving settings...';
+    statusMsg.className = 'status-message';
+  }
+
+  const deliveryEnabled = document.getElementById('settingAllowDelivery').checked;
+  const pickupEnabled = document.getElementById('settingAllowPickup').checked;
+
+  try {
+    const response = await fetch('/api/tenant/settings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${state.token}`,
+        'X-Tenant-ID': state.activeTenantId
+      },
+      body: JSON.stringify({ deliveryEnabled, pickupEnabled })
+    });
+    const data = await response.json();
+    
+    if (statusMsg) {
+      statusMsg.innerText = 'Storefront settings saved successfully!';
+      statusMsg.className = 'status-message success-message';
+    }
+  } catch (err) {
+    console.error('Failed to save settings:', err);
+    if (statusMsg) {
+      statusMsg.innerText = 'Failed to save storefront settings.';
+      statusMsg.className = 'status-message error-message';
+    }
   }
 }
 

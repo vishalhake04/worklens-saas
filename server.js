@@ -195,6 +195,55 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// Driver registration
+app.post('/api/auth/register-driver', async (req, res) => {
+  const { email, password, firstName, lastName, phone, tenantId } = req.body;
+  if (!email || !password || !firstName || !lastName || !phone || !tenantId) {
+    return res.status(400).json({ error: 'All fields (email, password, firstName, lastName, phone, tenantId) are required' });
+  }
+
+  try {
+    const platformDb = dbManager.getPlatformDb();
+    
+    // Check if driver already exists under this tenant partition
+    const existingUser = await dbManager.dbGet(platformDb, 'SELECT * FROM users WHERE email = ? AND tenant_id = ?', [email, tenantId]);
+    if (existingUser) {
+      return res.status(409).json({ error: 'A driver with this email address is already registered for this restaurant partition' });
+    }
+
+    const userId = `usr_drv_${Date.now()}`;
+    await dbManager.dbRun(
+      platformDb,
+      `INSERT INTO users (id, tenant_id, email, password_hash, role, first_name, last_name, phone, address, status) 
+       VALUES (?, ?, ?, ?, 'DRIVER', ?, ?, ?, NULL, 'ACTIVE')`,
+      [userId, tenantId, email, password, firstName, lastName, phone]
+    );
+
+    // Auto-login: Generate token
+    const token = jwt.sign(
+      { id: userId, tenantId, role: 'DRIVER', email, firstName, lastName },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({
+      message: 'Driver registered successfully',
+      token,
+      user: {
+        id: userId,
+        email,
+        role: 'DRIVER',
+        firstName,
+        lastName,
+        phone,
+        tenantId
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Auth Login Simulation
 app.post('/api/auth/login', async (req, res) => {
   const { email, password, tenantId } = req.body;
@@ -215,11 +264,11 @@ app.post('/api/auth/login', async (req, res) => {
       );
     }
     
-    // Fallback: search for a platform user (like Platform Admin or Driver) where tenant_id is NULL
+    // Fallback: search for a global platform admin user where tenant_id is NULL
     if (!user) {
       user = await dbManager.dbGet(
         platformDb, 
-        'SELECT * FROM users WHERE (email = ? OR phone = ?) AND tenant_id IS NULL', 
+        "SELECT * FROM users WHERE (email = ? OR phone = ?) AND tenant_id IS NULL AND role = 'PLATFORM_ADMIN'", 
         [email, email]
       );
     }
@@ -230,7 +279,7 @@ app.post('/api/auth/login', async (req, res) => {
 
     // Generate JWT Token
     const token = jwt.sign(
-      { id: user.id, tenantId: user.tenant_id, role: user.role, email: user.email },
+      { id: user.id, tenantId: user.tenant_id, role: user.role, email: user.email, firstName: user.first_name, lastName: user.last_name },
       JWT_SECRET,
       { expiresIn: '24h' }
     );
@@ -399,7 +448,9 @@ app.get('/api/storefront/restaurants', async (req, res) => {
             name: rest.name,
             address: rest.address,
             latitude: rest.latitude,
-            longitude: rest.longitude
+            longitude: rest.longitude,
+            deliveryEnabled: rest.delivery_enabled,
+            pickupEnabled: rest.pickup_enabled
           });
         }
       } catch (e) {
@@ -450,7 +501,7 @@ app.get('/api/storefront/restaurants/:tenant_id/menu', async (req, res) => {
 
 // Checkout Order
 app.post('/api/storefront/orders', authenticateToken, resolveTenantContext, async (req, res) => {
-  const { restaurantId, items, deliveryAddress, deliveryLat, deliveryLng, paymentMethod } = req.body;
+  const { restaurantId, items, deliveryAddress, deliveryLat, deliveryLng, paymentMethod, fulfillmentType } = req.body;
   if (!restaurantId || !items || !items.length || !deliveryAddress || !deliveryLat || !deliveryLng) {
     return res.status(400).json({ error: 'Missing required checkout fields' });
   }
@@ -479,7 +530,9 @@ app.post('/api/storefront/orders', authenticateToken, resolveTenantContext, asyn
       subtotalCents += itemCost * clientItem.quantity;
     }
 
-    const deliveryFeeCents = 350; // Mock flat delivery fee ($3.50)
+    const type = (fulfillmentType && ['DELIVERY', 'PICKUP'].includes(fulfillmentType.toUpperCase())) ? fulfillmentType.toUpperCase() : 'DELIVERY';
+    const deliveryFeeCents = type === 'PICKUP' ? 0 : 350; // Pickup has 0 delivery fee
+    const pickupCode = type === 'PICKUP' ? Math.floor(100000 + Math.random() * 900000).toString() : null;
     const taxCents = Math.round(subtotalCents * 0.08); // Mock 8% Tax
     
     // Calculate Commission Fee (e.g. 12% model split)
@@ -496,9 +549,9 @@ app.post('/api/storefront/orders', authenticateToken, resolveTenantContext, asyn
     // Create Order Record in tenant database
     await dbManager.dbRun(
       db,
-      `INSERT INTO orders (id, customer_id, restaurant_id, status, subtotal_cents, delivery_fee_cents, tax_cents, platform_commission_cents, total_cents, payment_status, payment_method, delivery_address, delivery_lat, delivery_lng) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [orderId, customerId, restaurantId, 'PLACED', subtotalCents, deliveryFeeCents, taxCents, platformCommissionCents, totalCents, payStatus, payMethod, deliveryAddress, deliveryLat, deliveryLng]
+      `INSERT INTO orders (id, customer_id, restaurant_id, status, subtotal_cents, delivery_fee_cents, tax_cents, platform_commission_cents, total_cents, payment_status, payment_method, delivery_address, delivery_lat, delivery_lng, fulfillment_type, pickup_code) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [orderId, customerId, restaurantId, 'PLACED', subtotalCents, deliveryFeeCents, taxCents, platformCommissionCents, totalCents, payStatus, payMethod, deliveryAddress, deliveryLat, deliveryLng, type, pickupCode]
     );
 
     // Save Line items & modifier entries
@@ -550,6 +603,7 @@ app.post('/api/storefront/orders', authenticateToken, resolveTenantContext, asyn
       taxCents,
       platformCommissionCents,
       totalCents,
+      pickupCode,
       splitDetails: {
         platformEarnings: platformCommissionCents + deliveryFeeCents,
         tenantEarnings: totalCents - (platformCommissionCents + deliveryFeeCents)
@@ -644,7 +698,9 @@ app.get('/api/storefront/orders/:orderId/track', authenticateToken, resolveTenan
       custLng: order.delivery_lng,
       driverLat,
       driverLng,
-      driverName
+      driverName,
+      fulfillmentType: order.fulfillment_type,
+      pickupCode: order.pickup_code
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -835,17 +891,44 @@ app.delete('/api/tenant/menu/items/:id', authenticateToken, resolveTenantContext
   }
 });
 
+// Fetch storefront settings configuration
+app.get('/api/tenant/settings', authenticateToken, resolveTenantContext, async (req, res) => {
+  try {
+    const db = req.tenantDb;
+    const rest = await dbManager.dbGet(db, 'SELECT delivery_enabled, pickup_enabled FROM restaurants LIMIT 1');
+    res.json(rest || { delivery_enabled: 1, pickup_enabled: 1 });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save storefront settings configuration
+app.post('/api/tenant/settings', authenticateToken, resolveTenantContext, async (req, res) => {
+  const { deliveryEnabled, pickupEnabled } = req.body;
+  try {
+    const db = req.tenantDb;
+    await dbManager.dbRun(
+      db, 
+      'UPDATE restaurants SET delivery_enabled = ?, pickup_enabled = ?', 
+      [deliveryEnabled ? 1 : 0, pickupEnabled ? 1 : 0]
+    );
+    res.json({ message: 'Settings saved successfully', deliveryEnabled, pickupEnabled });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Order State Machine Transitions (FSM Guard Rules)
 app.post('/api/tenant/orders/:id/transition', authenticateToken, resolveTenantContext, async (req, res) => {
   const { id } = req.params;
-  const { targetStatus } = req.body;
+  const { targetStatus, pickupCode } = req.body;
   if (!targetStatus) return res.status(400).json({ error: 'targetStatus field required' });
 
   const VALID_TRANSITIONS = {
     'PLACED': ['ACCEPTED', 'CANCELLED'],
     'ACCEPTED': ['PREPARING', 'CANCELLED'],
     'PREPARING': ['READY', 'CANCELLED'],
-    'READY': ['DISPATCHED'],
+    'READY': ['DISPATCHED', 'DELIVERED'],
     'DISPATCHED': ['DELIVERED']
   };
 
@@ -863,11 +946,18 @@ app.post('/api/tenant/orders/:id/transition', authenticateToken, resolveTenantCo
       });
     }
 
+    // Secure Pass Code Verification check for Self-Pickup fulfillment method
+    if (targetStatus === 'DELIVERED' && order.fulfillment_type === 'PICKUP') {
+      if (!pickupCode || pickupCode.trim() !== order.pickup_code) {
+        return res.status(400).json({ error: 'Invalid or missing pickup verification pass code.' });
+      }
+    }
+
     // Update Status
     await dbManager.dbRun(db, 'UPDATE orders SET status = ? WHERE id = ?', [targetStatus, id]);
 
     // Handle background actions for transitions
-    if (targetStatus === 'ACCEPTED' || targetStatus === 'PREPARING') {
+    if ((targetStatus === 'ACCEPTED' || targetStatus === 'PREPARING') && order.fulfillment_type !== 'PICKUP') {
       // Trigger driver dispatch routing algorithm async
       triggerDispatchLoop(req.tenantId, order);
     }
@@ -1024,10 +1114,10 @@ async function triggerDispatchLoop(tenantId, order, rejectList = []) {
     const db = await dbManager.getTenantDb(tenantId);
     const rest = await dbManager.dbGet(db, 'SELECT * FROM restaurants WHERE id = ?', [order.restaurant_id]);
     
-    // Step 1: Find available online drivers (no distance/proximity checks)
+    // Step 1: Find available online drivers (no distance/proximity checks, must match tenantId partition)
     const candidates = [];
     for (const [id, driver] of Object.entries(activeDrivers)) {
-      if (driver.status === 'ONLINE' && !rejectList.includes(id)) {
+      if (driver.status === 'ONLINE' && driver.tenantId === tenantId && !rejectList.includes(id)) {
         candidates.push({ id, ...driver });
       }
     }
@@ -1151,14 +1241,16 @@ wss.on('connection', (ws) => {
 
         const driverId = authenticatedUser.id;
         const { lat, lng, status } = payload.data;
+        const name = authenticatedUser.firstName ? `${authenticatedUser.firstName} ${authenticatedUser.lastName || ''}`.trim() : authenticatedUser.email;
 
-        // Save position in-memory
+        // Save position in-memory (including tenant partitioning details)
         if (activeDrivers[driverId]) {
           activeDrivers[driverId].lat = lat;
           activeDrivers[driverId].lng = lng;
           if (status) activeDrivers[driverId].status = status;
+          activeDrivers[driverId].tenantId = authenticatedUser.tenantId;
         } else {
-          activeDrivers[driverId] = { lat, lng, status: status || 'ONLINE', name: authenticatedUser.email };
+          activeDrivers[driverId] = { lat, lng, status: status || 'ONLINE', name: name, tenantId: authenticatedUser.tenantId };
         }
 
         // Broadast updated coordinates to consumers tracking active deliveries assigned to this driver
